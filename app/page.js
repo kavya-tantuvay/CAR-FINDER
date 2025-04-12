@@ -1,103 +1,179 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Header from './components/Header';
+import FilterPanel from './components/FilterPanel';
+import CarCard from './components/CarCard';
+import Pagination from './components/Pagination';
+import WishlistPanel from './components/WishlistPanel';
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const router = useRouter();
+  const [cars, setCars] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [filters, setFilters] = useState({
+    brand: '',
+    minPrice: '',
+    maxPrice: '',
+    fuelType: '',
+    seatingCapacity: ''
+  });
+  const [sort, setSort] = useState('price_asc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [isWishlistOpen, setIsWishlistOpen] = useState(false);
+  const [wishlist, setWishlist] = useState([]);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  useEffect(() => {
+    // Load wishlist from localStorage on startup
+    const savedWishlist = localStorage.getItem('wishlist');
+    if (savedWishlist) {
+      try {
+        setWishlist(JSON.parse(savedWishlist));
+      } catch (e) {
+        console.error('Error loading wishlist:', e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    // Save wishlist to localStorage whenever it changes
+    localStorage.setItem('wishlist', JSON.stringify(wishlist));
+  }, [wishlist]);
+
+  useEffect(() => {
+    fetchCars();
+  }, [filters, sort, currentPage]);
+
+  const fetchCars = async () => {
+    setLoading(true);
+    try {
+      // Build query string from filters
+      const params = new URLSearchParams();
+      
+      if (filters.brand) params.append('brand', filters.brand);
+      if (filters.minPrice) params.append('minPrice', filters.minPrice);
+      if (filters.maxPrice) params.append('maxPrice', filters.maxPrice);
+      if (filters.fuelType) params.append('fuelType', filters.fuelType);
+      if (filters.seatingCapacity) params.append('seatingCapacity', filters.seatingCapacity);
+      
+      params.append('sort', sort);
+      params.append('page', currentPage);
+      params.append('limit', 6); // Number of cars per page
+      
+      const response = await fetch(`/api/cars?${params.toString()}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch cars');
+      }
+      
+      const data = await response.json();
+      setCars(data.cars);
+      setTotalPages(data.totalPages);
+      setError(null);
+    } catch (err) {
+      setError('Error loading cars. Please try again later.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFilterChange = (newFilters) => {
+    setFilters(newFilters);
+    setCurrentPage(1); // Reset to first page on filter change
+  };
+
+  const handleSortChange = (newSort) => {
+    setSort(newSort);
+    setCurrentPage(1); // Reset to first page on sort change
+  };
+
+  const toggleWishlist = (car) => {
+    setWishlist(prevWishlist => {
+      // Check if car is already in wishlist
+      const isInWishlist = prevWishlist.some(item => item.id === car.id);
+      
+      if (isInWishlist) {
+        // Remove from wishlist
+        return prevWishlist.filter(item => item.id !== car.id);
+      } else {
+        // Add to wishlist
+        return [...prevWishlist, car];
+      }
+    });
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+      <Header 
+        onWishlistClick={() => setIsWishlistOpen(true)}
+        wishlistCount={wishlist.length}
+      />
+      
+      <main className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl font-bold mb-8 text-center dark:text-white">Find Your Perfect Car</h1>
+        
+        <div className="flex flex-col lg:flex-row gap-6">
+          <FilterPanel 
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            onSortChange={handleSortChange}
+            selectedSort={sort}
+          />
+          
+          {loading ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+          ) : error ? (
+            <div className="flex-1 text-center text-red-500 dark:text-red-400">
+              {error}
+            </div>
+          ) : (
+            <>
+              <div className="flex-1">
+                {cars.length === 0 ? (
+                  <div className="text-center text-gray-500 dark:text-gray-400 py-12">
+                    <p className="text-xl">No cars found matching your criteria.</p>
+                    <p className="mt-2">Try adjusting your filters to see more results.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {cars.map(car => (
+                      <CarCard 
+                        key={car.id}
+                        car={car}
+                        isInWishlist={wishlist.some(item => item.id === car.id)}
+                        onToggleWishlist={() => toggleWishlist(car)}
+                        onViewDetails={() => router.push(`/car/${car.id}`)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              {totalPages > 1 && (
+                <Pagination 
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                />
+              )}
+            </>
+          )}
         </div>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      
+      <WishlistPanel 
+        wishlist={wishlist}
+        isOpen={isWishlistOpen}
+        onClose={() => setIsWishlistOpen(false)}
+        onToggleWishlist={toggleWishlist}
+        onViewDetails={(id) => router.push(`/car/${id}`)}
+      />
     </div>
   );
 }
